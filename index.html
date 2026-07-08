@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mapa de Postes - Status</title>
+    <title>Mapa de Postes - Status com Filtros</title>
     
     <!-- Biblioteca CSS do Leaflet para o Mapa -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -14,39 +14,122 @@
             padding: 0;
             height: 100%;
             font-family: Arial, sans-serif;
-        }
-        
-        #map {
-            width: 100%;
-            height: 100vh; /* Ocupa a tela toda */
+            display: flex;
+            flex-direction: column;
+            background-color: #f4f7f6;
         }
 
-        /* Estilo da Legenda flutuante */
-        .legend {
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-            line-height: 1.5;
+        /* --- Estilos do Painel de Filtros no Topo --- */
+        #filters-header {
+            background: #ffffff;
+            padding: 15px 25px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            z-index: 2000; /* Fica acima do mapa */
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .filter-row {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .filter-title {
+            font-weight: bold;
             color: #333;
+            min-width: 80px;
+            font-size: 15px;
         }
-        .legend h4 {
-            margin: 0 0 10px 0;
-            font-size: 16px;
+
+        .filter-label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            font-size: 14px;
+            color: #555;
+            background: #f8f9fa;
+            padding: 6px 12px;
+            border-radius: 20px;
+            border: 1px solid #dee2e6;
+            transition: 0.2s;
         }
-        .legend i {
-            width: 18px;
-            height: 18px;
-            float: left;
+
+        .filter-label:hover {
+            background: #e9ecef;
+        }
+
+        .filter-label input {
             margin-right: 8px;
-            opacity: 0.8;
-            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        /* Quadrado de cor para usar na legenda/filtro */
+        .color-box {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            margin-right: 6px;
+            border-radius: 3px;
+        }
+        
+        /* Container do Mapa */
+        #map {
+            flex-grow: 1; /* Ocupa todo o resto da tela */
+            width: 100%;
+            z-index: 1;
         }
     </style>
 </head>
 <body>
 
-    <!-- Container do Mapa -->
+    <!-- PAINEL DE FILTROS -->
+    <div id="filters-header">
+        
+        <!-- Filtros por Cidade -->
+        <div class="filter-row">
+            <div class="filter-title">Cidades:</div>
+            <label class="filter-label">
+                <input type="checkbox" class="city-filter" value="taboao" checked> Taboão da Serra
+            </label>
+            <label class="filter-label">
+                <input type="checkbox" class="city-filter" value="carapicuiba" checked> Carapicuíba
+            </label>
+            <label class="filter-label">
+                <input type="checkbox" class="city-filter" value="embu" checked> Embu das Artes
+            </label>
+        </div>
+
+        <!-- Filtros por Status (e Legenda) -->
+        <div class="filter-row">
+            <div class="filter-title">Situação:</div>
+            <label class="filter-label">
+                <input type="checkbox" class="status-filter" value="#28a745" checked> 
+                <span class="color-box" style="background:#28a745;"></span> Aprovada (Existente)
+            </label>
+            <label class="filter-label">
+                <input type="checkbox" class="status-filter" value="#dc3545" checked> 
+                <span class="color-box" style="background:#dc3545;"></span> Reprovada (Existente)
+            </label>
+            <label class="filter-label">
+                <input type="checkbox" class="status-filter" value="#007bff" checked> 
+                <span class="color-box" style="background:#007bff;"></span> Aprovada (Não Existente)
+            </label>
+            <label class="filter-label">
+                <input type="checkbox" class="status-filter" value="#e83e8c" checked> 
+                <span class="color-box" style="background:#e83e8c;"></span> Reprovada c/ Desenho
+            </label>
+            <label class="filter-label">
+                <input type="checkbox" class="status-filter" value="#6c757d" checked> 
+                <span class="color-box" style="background:#6c757d;"></span> Outros / Sem Info.
+            </label>
+        </div>
+
+    </div>
+
+    <!-- MAPA -->
     <div id="map"></div>
 
     <!-- Biblioteca JS do Leaflet -->
@@ -54,15 +137,15 @@
 
     <script>
         // 1. INICIALIZAÇÃO DO MAPA
-        // Define o centro do mapa inicialmente para SP, mas ele vai dar zoom automático depois
         const map = L.map('map').setView([-23.5505, -46.6333], 10);
-
-        // Adiciona a camada de mapa (OpenStreetMap)
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; OpenStreetMap contributors'
         }).addTo(map);
 
-        // 2. DADOS GEOJSON (Embutidos diretamente no arquivo)
+        // Cria um grupo global vazio para armazenar as linhas
+        const camadaGeral = L.featureGroup().addTo(map);
+
+        // 2. DADOS GEOJSON
         const taboaoDaSerra = {
             "type": "FeatureCollection",
             "name": "TABOAO DA SERRA",
@@ -103,6 +186,13 @@
             ]
         };
 
+        // Objeto que agrupa as bases para facilitar o filtro
+        const datasetsGeoJSON = {
+            'taboao': taboaoDaSerra,
+            'carapicuiba': carapicuiba,
+            'embu': embuDasArtes
+        };
+
 
         // 3. LÓGICA DE CORES
         function getColorByStatus(description) {
@@ -110,21 +200,20 @@
 
             let desc = description.toUpperCase();
 
-            // Regras Específicas solicitadas por você
+            // Regras Específicas
             if (desc.includes("APROVADA E EXISTENTE")) return '#28a745'; // Verde
             if (desc.includes("REPROVADA E EXISTENTE")) return '#dc3545'; // Vermelho
             if (desc.includes("APROVADA E NÃO EXISTENTE") || desc.includes("APROVADA E NAO EXISTENTE")) return '#007bff'; // Azul
             if (desc.includes("REPROVADA C/ DESENHO")) return '#e83e8c'; // Magenta
 
-            // Fallback (Porque nos arquivos enviados, está escrito apenas "APROVADO" ou "REPROVADO")
-            if (desc.includes("APROV")) return '#28a745'; // Verde para qualquer Aprovado
-            if (desc.includes("REPROV")) return '#dc3545'; // Vermelho para qualquer Reprovado
+            // Fallback Genérico
+            if (desc.includes("APROV")) return '#28a745'; // Verde
+            if (desc.includes("REPROV")) return '#dc3545'; // Vermelho
 
-            return '#6c757d'; // Cinza para qualquer outra coisa
+            return '#6c757d'; // Cinza (Outros)
         }
 
-
-        // 4. ESTILIZANDO E ADICIONANDO POPUPS
+        // Estilo das linhas
         function styleFeature(feature) {
             return {
                 color: getColorByStatus(feature.properties.description),
@@ -133,11 +222,10 @@
             };
         }
 
+        // Popup de cada linha
         function onEachFeature(feature, layer) {
             let nome = feature.properties.Name || "Sem Nome";
             let descricao = feature.properties.description || "Sem descrição disponível";
-            
-            // Troca as quebras de linha invisíveis por <br> no HTML para ficar bonito no popup
             descricao = descricao.replace(/\n/g, '<br>');
 
             let popupContent = `
@@ -149,44 +237,54 @@
             layer.bindPopup(popupContent);
         }
 
-        // 5. CARREGANDO OS DADOS NO MAPA
-        // Cria um grupo para todas as camadas (isso ajuda a dar o zoom automático no final)
-        const camadaGeral = L.featureGroup();
+        // 4. LÓGICA DE FILTRAGEM
+        function updateMap() {
+            // Limpa o mapa atual antes de desenhar o novo
+            camadaGeral.clearLayers();
 
-        // Array com os 3 arquivos
-        const todosOsDados = [taboaoDaSerra, carapicuiba, embuDasArtes];
+            // Pega as cidades que estão marcadas no painel
+            const cidadesMarcadas = Array.from(document.querySelectorAll('.city-filter:checked')).map(cb => cb.value);
+            
+            // Pega os status que estão marcados no painel
+            const statusMarcados = Array.from(document.querySelectorAll('.status-filter:checked')).map(cb => cb.value);
 
-        // Processa cada arquivo
-        todosOsDados.forEach(geojsonDados => {
-            const layer = L.geoJSON(geojsonDados, {
-                style: styleFeature,
-                onEachFeature: onEachFeature
+            let adicionouAlgo = false;
+
+            // Para cada cidade marcada, processa o GeoJSON
+            cidadesMarcadas.forEach(cidadeId => {
+                const layerGroup = L.geoJSON(datasetsGeoJSON[cidadeId], {
+                    style: styleFeature,
+                    onEachFeature: onEachFeature,
+                    // Aqui mora a mágica: O Leaflet só desenha a linha se essa função retornar verdadeiro
+                    filter: function(feature) {
+                        const corDestaLinha = getColorByStatus(feature.properties.description);
+                        // Verifica se a cor dessa linha está dentro dos status que o usuário deixou marcado
+                        return statusMarcados.includes(corDestaLinha);
+                    }
+                });
+                
+                camadaGeral.addLayer(layerGroup);
+                
+                if(layerGroup.getLayers().length > 0) {
+                    adicionouAlgo = true;
+                }
             });
-            camadaGeral.addLayer(layer);
+
+            // Se ainda tem linhas desenhadas, foca a câmera nelas
+            if (adicionouAlgo) {
+                map.fitBounds(camadaGeral.getBounds());
+            }
+        }
+
+        // 5. ATIVAÇÃO DOS FILTROS E CARREGAMENTO INICIAL
+        
+        // Atribui a função 'updateMap' a todos os checkboxes da tela (quando clicados, atualizam o mapa)
+        document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+            checkbox.addEventListener('change', updateMap);
         });
 
-        // Adiciona tudo no mapa
-        camadaGeral.addTo(map);
-
-        // Zoom automático para mostrar todas as linhas
-        map.fitBounds(camadaGeral.getBounds());
-
-
-        // 6. ADICIONANDO A LEGENDA NO CANTO DA TELA
-        const legend = L.control({position: 'bottomright'});
-
-        legend.onAdd = function (map) {
-            const div = L.DomUtil.create('div', 'legend');
-            div.innerHTML += '<h4>Status</h4>';
-            div.innerHTML += '<i style="background: #28a745"></i> Aprovada e existente (ou Aprovada)<br>';
-            div.innerHTML += '<i style="background: #dc3545"></i> Reprovada e existente (ou Reprovada)<br>';
-            div.innerHTML += '<i style="background: #007bff"></i> Aprovada e não existente<br>';
-            div.innerHTML += '<i style="background: #e83e8c"></i> Reprovada c/ desenho<br>';
-            div.innerHTML += '<i style="background: #6c757d"></i> Sem Informação<br>';
-            return div;
-        };
-
-        legend.addTo(map);
+        // Chama a função uma vez no início para carregar o mapa a primeira vez
+        updateMap();
 
     </script>
 </body>
